@@ -3,14 +3,15 @@
 Lightweight x86-64 OS (Assembly + Rust), UEFI + Limine, targeting Windows app
 compatibility via WinCompat.
 
-## Phase 0 development
+## Start in GitHub Codespaces
 
-### GitHub Codespaces (recommended)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/DanielAndersonCDS/MardukOS)
 
-You can build and test MardukOS in a browser-based Linux environment without
-installing the toolchain on your computer. See [CODESPACES.md](CODESPACES.md).
+Open the repository in a browser-based Linux development environment. The first
+setup automatically installs the toolchain, fetches Limine, builds the kernel,
+and runs a QEMU boot smoke test. See [CODESPACES.md](CODESPACES.md).
 
-### Debian/Ubuntu (local)
+## Local Debian/Ubuntu development
 
 ```bash
 sudo apt install nasm qemu-system-x86 ovmf git make build-essential
@@ -25,11 +26,14 @@ Expected serial output after a successful boot:
 MardukOS kernel initialized.
 ```
 
-Exit QEMU with Ctrl-A, then X. Debug with `make debug`, then in another terminal:
+Exit QEMU with Ctrl-A, then X. Run `make test-boot` for a non-interactive boot
+smoke test. Debug with `make debug`, then in another terminal:
 
 ```bash
 gdb target/x86_64-unknown-none/debug/marduk-kernel -ex "target remote :1234"
 ```
 
-**Status: UNTESTED scaffold.** The Codespaces configuration installs the
-development tools; the kernel still needs its first successful build and boot.
+**Phase 0 boot smoke test: PASS.** GitHub Actions builds the kernel, launches
+UEFI + Limine in QEMU, and verifies the serial message above. This confirms the
+initial boot path and UART output only; it does not mean the broader OS or Windows
+application compatibility layers are implemented.

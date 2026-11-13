@@ -15,7 +15,16 @@ export PATH="$HOME/.cargo/bin:$PATH"
 rustup toolchain install stable --profile minimal
 rustup target add x86_64-unknown-none
 
-echo "==> MardukOS development environment is ready"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+echo "==> Fetching Limine"
+make fetch-limine
+
+echo "==> Building MardukOS and running the first boot smoke test"
+make test-boot
+
+echo "==> MardukOS Codespaces environment is ready"
 rustc --version
 cargo --version
 nasm -v
