@@ -75,8 +75,8 @@ jobs:
           echo
           echo "===== Verify double-fault handler is executing on IST1 ====="
           stack_start="$(nm -C target/x86_64-unknown-none/debug/marduk-kernel | awk '/DOUBLE_FAULT_STACK$/ {print $1; exit}')"
-          ist_rsp="$(sed -n 's/.*RSP=\\(0x[0-9a-fA-F]*\\).*/\\1/p' build/test-boot.log | head -n 1)"
-          interrupted_rsp="$(sed -n 's/.*Interrupted RSP=\\(0x[0-9a-fA-F]*\\).*/\\1/p' build/test-boot.log | head -n 1)"
+          ist_rsp="$(sed -n 's/.*RSP=\(0x[0-9a-fA-F]*\).*/\1/p' build/test-boot.log | head -n 1)"
+          interrupted_rsp="$(sed -n 's/.*Interrupted RSP=\(0x[0-9a-fA-F]*\).*/\1/p' build/test-boot.log | head -n 1)"
           echo "IST stack base: 0x${stack_start}"
           echo "Handler RSP: ${ist_rsp}"
           echo "Interrupted RSP: ${interrupted_rsp}"
