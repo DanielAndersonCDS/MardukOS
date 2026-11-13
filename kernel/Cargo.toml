@@ -1,0 +1,11 @@
+[package]
+name = "marduk-kernel"
+version = "0.0.1"
+edition = "2021"
+build = "build.rs"
+
+[[bin]]
+name = "marduk-kernel"
+path = "src/main.rs"
+test = false
+bench = false
