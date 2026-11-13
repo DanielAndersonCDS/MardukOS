@@ -9,3 +9,10 @@ name = "marduk-kernel"
 path = "src/main.rs"
 test = false
 bench = false
+
+# Self-tests: build with e.g.  make run FEATURES=test-divide
+[features]
+test-breakpoint = []
+test-divide = []
+test-pagefault = []
+test-doublefault = []
