@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 # Usage: make fetch-limine && make run
 # Override OVMF paths if your distribution stores the firmware elsewhere.
 OVMF      ?= $(firstword $(wildcard /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd /usr/share/edk2/ovmf/OVMF_CODE.fd /usr/share/qemu/OVMF.fd))
@@ -7,7 +9,7 @@ KERNEL    := target/x86_64-unknown-none/debug/marduk-kernel
 ESP       := build/esp
 LIMINE    := build/limine
 
-.PHONY: all kernel esp run debug clean fetch-limine prepare-vars
+.PHONY: all kernel esp run debug clean fetch-limine prepare-vars test-boot
 all: esp
 
 kernel:
@@ -39,6 +41,20 @@ QEMU_FLAGS = -machine pc,accel=tcg -m 256M -display none -serial stdio -no-reboo
 run: esp prepare-vars
 	test -n "$(OVMF)" || (echo "OVMF code image not found; set OVMF=/path/to/OVMF_CODE.fd" && exit 1)
 	qemu-system-x86_64 $(QEMU_FLAGS)
+
+# CI and Codespaces use this headless smoke test to verify the serial boot message.
+test-boot: esp prepare-vars
+	@set +e; \
+	  timeout --signal=TERM --kill-after=2s 90s qemu-system-x86_64 $(QEMU_FLAGS) 2>&1 | tee build/test-boot.log; \
+	  qemu_status=$${PIPESTATUS[0]}; \
+	  set -e; \
+	  if ! grep -Fq "MardukOS kernel initialized." build/test-boot.log; then \
+	    echo "ERROR: MardukOS did not print its expected kernel serial message."; \
+	    echo "QEMU exit status: $${qemu_status}"; \
+	    cat build/test-boot.log; \
+	    exit 1; \
+	  fi; \
+	  echo "MardukOS boot smoke test passed."
 
 debug: esp prepare-vars
 	test -n "$(OVMF)" || (echo "OVMF code image not found; set OVMF=/path/to/OVMF_CODE.fd" && exit 1)
