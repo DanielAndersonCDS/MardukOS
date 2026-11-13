@@ -1,0 +1,80 @@
+name: MardukOS Phase 1a exception tests
+
+on:
+  push:
+    branches: [phase1a-feature-tests]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  exception-tests:
+    name: Build and run GDT/TSS/IDT exception tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential curl git make nasm ovmf qemu-system-x86 binutils
+
+      - name: Install Rust and bare-metal target
+        run: |
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" toolchain install stable --profile minimal
+          "$HOME/.cargo/bin/rustup" target add x86_64-unknown-none
+
+      - name: Fetch Limine
+        run: make fetch-limine
+
+      - name: Run all five boot and exception tests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          run_case() {
+            local feature="$1"
+            local expected="$2"
+            local expected2="$3"
+            echo
+            echo "============================================================"
+            echo "TEST FEATURES=${feature:-<none>}"
+            echo "============================================================"
+            make test-boot FEATURES="$feature" EXPECT="$expected" EXPECT2="$expected2"
+          }
+
+          run_case "" \
+            "Boot sequence complete; halting." \
+            "GDT, TSS and IDT loaded."
+
+          run_case "test-breakpoint" \
+            "Breakpoint at RIP=" \
+            "Breakpoint handled, execution resumed."
+
+          run_case "test-divide" \
+            "CPU EXCEPTION: Divide Error (#DE) (vector 0)" \
+            "System halted."
+
+          run_case "test-pagefault" \
+            "CR2=0x0000deadb000" \
+            "[not-present read supervisor]"
+
+          run_case "test-doublefault" \
+            "CPU EXCEPTION: Double Fault (#DF) (vector 8)" \
+            "System halted."
+
+          echo
+          echo "===== Double-fault stack symbol ====="
+          nm -C target/x86_64-unknown-none/debug/marduk-kernel | grep -i 'DOUBLE_FAULT_STACK' || true
+          echo
+          echo "===== Double-fault RSP diagnostic ====="
+          grep -E 'RSP=0x' build/test-boot.log || true
