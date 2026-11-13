@@ -30,7 +30,7 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           "$HOME/.cargo/bin/rustup" target add x86_64-unknown-none
 
-      - name: Build kernel
+      - name: Build kernel and inspect ELF
         run: |
           cargo build --verbose
           readelf -h target/x86_64-unknown-none/debug/marduk-kernel
@@ -40,17 +40,4 @@ jobs:
         run: make fetch-limine
 
       - name: Boot in QEMU and check serial output
-        shell: bash
-        run: |
-          set +e
-          timeout --signal=TERM --kill-after=2s 90s make run 2>&1 | tee qemu.log
-          qemu_status=${PIPESTATUS[0]}
-          set -e
-          if ! grep -Fq "MardukOS kernel initialized." qemu.log; then
-            echo "::error::The expected kernel serial message was not observed."
-            echo "QEMU exit status: ${qemu_status}"
-            echo "Full QEMU output:"
-            cat qemu.log
-            exit 1
-          fi
-          echo "Kernel serial message observed. QEMU was stopped after the boot check."
+        run: make test-boot
