@@ -65,7 +65,7 @@ jobs:
             "System halted."
 
           run_case "test-pagefault" \
-            "CR2=0x0000deadb000" \
+            "CR2=0x00000000deadb000" \
             "[not-present read supervisor]"
 
           run_case "test-doublefault" \
