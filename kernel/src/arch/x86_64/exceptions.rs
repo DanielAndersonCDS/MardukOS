@@ -41,7 +41,17 @@ pub extern "C" fn exception_handler(f: &mut TrapFrame) {
 
     let _ = writeln!(out, "\n*** CPU EXCEPTION: {} (vector {}) ***", NAMES.get(v).unwrap_or(&"?"), v);
     let _ = writeln!(out, "error={:#x}  RIP={:#018x}  CS={:#x}  RFLAGS={:#x}", f.error, f.rip, f.cs, f.rflags);
-    let _ = writeln!(out, "RSP={:#018x}  SS={:#x}", f.rsp, f.ss);
+    // In an IST exception, the CPU saves the interrupted RSP in the frame,
+    // but the handler is executing on the TSS-provided IST stack. Report the
+    // live handler RSP for #DF and retain the interrupted value separately.
+    let handler_rsp: u64;
+    // SAFETY: reading RSP does not modify machine state.
+    unsafe { asm!("mov {}, rsp", out(reg) handler_rsp, options(nomem, nostack, preserves_flags)) };
+    let reported_rsp = if v == 8 { handler_rsp } else { f.rsp };
+    let _ = writeln!(out, "RSP={:#018x}  SS={:#x}", reported_rsp, f.ss);
+    if v == 8 {
+        let _ = writeln!(out, "Interrupted RSP={:#018x}", f.rsp);
+    }
     let _ = writeln!(out, "RAX={:#018x} RBX={:#018x} RCX={:#018x} RDX={:#018x}", f.rax, f.rbx, f.rcx, f.rdx);
     let _ = writeln!(out, "RSI={:#018x} RDI={:#018x} RBP={:#018x}", f.rsi, f.rdi, f.rbp);
 
