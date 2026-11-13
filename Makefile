@@ -42,15 +42,14 @@ run: esp prepare-vars
 	test -n "$(OVMF)" || (echo "OVMF code image not found; set OVMF=/path/to/OVMF_CODE.fd" && exit 1)
 	qemu-system-x86_64 $(QEMU_FLAGS)
 
-# CI and Codespaces use this headless smoke test to verify the serial boot message.
+# Stop QEMU as soon as the kernel's serial message is observed; retain a timeout as a guard.
 test-boot: esp prepare-vars
 	@set +e; \
-	  timeout --signal=TERM --kill-after=2s 90s qemu-system-x86_64 $(QEMU_FLAGS) 2>&1 | tee build/test-boot.log; \
-	  qemu_status=$${PIPESTATUS[0]}; \
+	  timeout --signal=TERM --kill-after=2s 90s qemu-system-x86_64 $(QEMU_FLAGS) 2>&1 | tee build/test-boot.log | grep -Fq "MardukOS kernel initialized."; \
+	  boot_status=$${PIPESTATUS[2]}; \
 	  set -e; \
-	  if ! grep -Fq "MardukOS kernel initialized." build/test-boot.log; then \
+	  if [ "$${boot_status}" -ne 0 ]; then \
 	    echo "ERROR: MardukOS did not print its expected kernel serial message."; \
-	    echo "QEMU exit status: $${qemu_status}"; \
 	    cat build/test-boot.log; \
 	    exit 1; \
 	  fi; \
