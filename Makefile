@@ -1,6 +1,6 @@
 # Usage: make fetch-limine && make run
 # Override OVMF if needed: make run OVMF=/path/to/OVMF_CODE.fd
-OVMF    ?= $(firstword $(wildcard /usr/share/OVMF/OVMF_CODE.fd /usr/share/edk2/ovmf/OVMF_CODE.fd /usr/share/qemu/OVMF.fd))
+OVMF    ?= $(firstword $(wildcard /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd /usr/share/edk2/ovmf/OVMF_CODE.fd /usr/share/qemu/OVMF.fd))
 KERNEL  := target/x86_64-unknown-none/debug/marduk-kernel
 ESP     := build/esp
 LIMINE  := build/limine
@@ -22,15 +22,17 @@ esp: kernel
 	cp tools/limine.conf $(ESP)/EFI/BOOT/limine.conf
 	cp $(KERNEL) $(ESP)/boot/marduk-kernel
 
-QEMU_FLAGS = -machine q35 -m 256M -display none -serial stdio -no-reboot \
+# TCG uses software emulation, so nested hardware virtualization is not required.
+QEMU_FLAGS = -machine q35,accel=tcg -m 256M -display none -serial stdio -no-reboot \
   -drive if=pflash,format=raw,readonly=on,file=$(OVMF) \
   -drive format=raw,file=fat:rw:$(ESP)
 
 run: esp
-	test -n "$(OVMF)" || (echo "OVMF not found; set OVMF=" && exit 1)
+	test -n "$(OVMF)" || (echo "OVMF not found; set OVMF=/path/to/OVMF_CODE.fd" && exit 1)
 	qemu-system-x86_64 $(QEMU_FLAGS)
 
 debug: esp
+	test -n "$(OVMF)" || (echo "OVMF not found; set OVMF=/path/to/OVMF_CODE.fd" && exit 1)
 	qemu-system-x86_64 $(QEMU_FLAGS) -s -S
 
 clean:
