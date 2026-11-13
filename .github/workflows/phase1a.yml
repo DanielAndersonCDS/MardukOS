@@ -1,0 +1,106 @@
+name: MardukOS Phase 1a exception tests
+
+on:
+  push:
+    branches: [phase1a-feature-tests]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  exception-tests:
+    name: Build and run GDT/TSS/IDT exception tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential curl git make nasm ovmf qemu-system-x86 binutils
+
+      - name: Install Rust and bare-metal target
+        run: |
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" toolchain install stable --profile minimal
+          "$HOME/.cargo/bin/rustup" target add x86_64-unknown-none
+
+      - name: Fetch Limine
+        run: make fetch-limine
+
+      - name: Run all five boot and exception tests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          run_case() {
+            local feature="$1"
+            local expected="$2"
+            local expected2="$3"
+            echo
+            echo "============================================================"
+            echo "TEST FEATURES=${feature:-<none>}"
+            echo "============================================================"
+            make test-boot FEATURES="$feature" EXPECT="$expected" EXPECT2="$expected2"
+          }
+
+          run_case "" \
+            "Boot sequence complete; halting." \
+            "GDT, TSS and IDT loaded."
+
+          run_case "test-breakpoint" \
+            "Breakpoint at RIP=" \
+            "Breakpoint handled, execution resumed."
+
+          run_case "test-divide" \
+            "CPU EXCEPTION: Divide Error (#DE) (vector 0)" \
+            "System halted."
+
+          run_case "test-pagefault" \
+            "CR2=0x00000000deadb000" \
+            "[not-present read supervisor]"
+
+          run_case "test-doublefault" \
+            "CPU EXCEPTION: Double Fault (#DF) (vector 8)" \
+            "System halted."
+
+          echo
+          echo "===== Verify double-fault handler is executing on IST1 ====="
+          stack_start="$(nm -C target/x86_64-unknown-none/debug/marduk-kernel | awk '/DOUBLE_FAULT_STACK$/ {print $1; exit}')"
+          ist_rsp="$(sed -n 's/.*RSP=\(0x[0-9a-fA-F]*\).*/\1/p' build/test-boot.log | head -n 1)"
+          interrupted_rsp="$(sed -n 's/.*Interrupted RSP=\(0x[0-9a-fA-F]*\).*/\1/p' build/test-boot.log | head -n 1)"
+          echo "IST stack base: 0x${stack_start}"
+          echo "Handler RSP: ${ist_rsp}"
+          echo "Interrupted RSP: ${interrupted_rsp}"
+          python3 - "${stack_start}" "${ist_rsp}" "${interrupted_rsp}" <<'PY'
+          import sys
+
+          stack_start = int(sys.argv[1], 16)
+          handler_rsp = int(sys.argv[2], 16)
+          interrupted_rsp = int(sys.argv[3], 16)
+          stack_end = stack_start + 16 * 1024
+
+          if not stack_start <= handler_rsp < stack_end:
+              raise SystemExit(
+                  f"FAIL: handler RSP {handler_rsp:#x} is outside IST1 "
+                  f"[{stack_start:#x}, {stack_end:#x})"
+              )
+          if interrupted_rsp != 0x8000000000000000:
+              raise SystemExit(
+                  f"FAIL: expected the deliberately invalid interrupted RSP, "
+                  f"got {interrupted_rsp:#x}"
+              )
+          print(
+              f"PASS: handler RSP {handler_rsp:#x} is inside IST1 "
+              f"[{stack_start:#x}, {stack_end:#x}); original invalid RSP "
+              f"{interrupted_rsp:#x} was preserved separately."
+          )
+          PY

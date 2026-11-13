@@ -1,6 +1,7 @@
 SHELL := /bin/bash
 
 # Usage: make fetch-limine && make run
+# Optional self-test: make run FEATURES=test-breakpoint|test-divide|test-pagefault|test-doublefault
 # Override OVMF paths if your distribution stores the firmware elsewhere.
 OVMF      ?= $(firstword $(wildcard /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd /usr/share/edk2/ovmf/OVMF_CODE.fd /usr/share/qemu/OVMF.fd))
 OVMF_VARS ?= $(firstword $(wildcard /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.fd /usr/share/edk2/ovmf/OVMF_VARS.fd /usr/share/qemu/OVMF_VARS.fd))
@@ -13,7 +14,7 @@ LIMINE    := build/limine
 all: esp
 
 kernel:
-	cargo build
+	cargo build -p marduk-kernel $(if $(FEATURES),--features "$(FEATURES)",)
 
 fetch-limine:
 	mkdir -p build
@@ -42,28 +43,32 @@ run: esp prepare-vars
 	test -n "$(OVMF)" || (echo "OVMF code image not found; set OVMF=/path/to/OVMF_CODE.fd" && exit 1)
 	qemu-system-x86_64 $(QEMU_FLAGS)
 
-# CI and Codespaces use this headless smoke test to verify the serial boot message.
+# Headless test runner. EXPECT and EXPECT2 can select the serial lines that prove
+# a particular CPU exception path reached its expected handler.
+EXPECT  ?= Boot sequence complete; halting.
+EXPECT2 ?=
 test-boot: esp prepare-vars
 	@set -e; \
 	  rm -f build/test-boot.log; \
 	  qemu-system-x86_64 $(QEMU_FLAGS) > build/test-boot.log 2>&1 & \
 	  qemu_pid=$$!; \
+	  found=0; \
 	  for ((elapsed=0; elapsed<90; elapsed++)); do \
-	    if grep -Fq "MardukOS kernel initialized." build/test-boot.log; then \
-	      kill "$$qemu_pid" 2>/dev/null || true; \
-	      wait "$$qemu_pid" 2>/dev/null || true; \
-	      cat build/test-boot.log; \
-	      echo "MardukOS boot smoke test passed."; \
-	      exit 0; \
+	    if grep -Fq "$(EXPECT)" build/test-boot.log && { [ -z "$(EXPECT2)" ] || grep -Fq "$(EXPECT2)" build/test-boot.log; }; then \
+	      found=1; \
+	      break; \
 	    fi; \
 	    if ! kill -0 "$$qemu_pid" 2>/dev/null; then break; fi; \
 	    sleep 1; \
 	  done; \
 	  kill "$$qemu_pid" 2>/dev/null || true; \
 	  wait "$$qemu_pid" 2>/dev/null || true; \
-	  echo "ERROR: MardukOS did not print its expected kernel serial message."; \
 	  cat build/test-boot.log; \
-	  exit 1
+	  if [ "$$found" -ne 1 ]; then \
+	    echo "ERROR: expected serial output was not observed: $(EXPECT) $(EXPECT2)"; \
+	    exit 1; \
+	  fi; \
+	  echo "MardukOS boot test passed: $(FEATURES)"
 
 debug: esp prepare-vars
 	test -n "$(OVMF)" || (echo "OVMF code image not found; set OVMF=/path/to/OVMF_CODE.fd" && exit 1)
