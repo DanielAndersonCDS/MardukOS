@@ -18,26 +18,5 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential curl git make nasm ovmf qemu-system-x86
-
-      - name: Install Rust and bare-metal target
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          "$HOME/.cargo/bin/rustup" target add x86_64-unknown-none
-
-      - name: Build kernel and inspect ELF
-        run: |
-          cargo build --verbose
-          readelf -h target/x86_64-unknown-none/debug/marduk-kernel
-          readelf -l target/x86_64-unknown-none/debug/marduk-kernel
-
-      - name: Fetch Limine bootloader
-        run: make fetch-limine
-
-      - name: Boot in QEMU and check serial output
-        run: make test-boot
+      - name: Run the same automatic setup used by Codespaces
+        run: bash .devcontainer/setup.sh
